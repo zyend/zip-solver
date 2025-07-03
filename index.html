@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<title>LinkedIn Zip Solver</title>
+	<style>
+		body {
+			font-family: sans-serif;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			margin: 2em;
+		}
+
+		h1 {
+			margin-bottom: .4rem;
+		}
+
+		p {
+			margin-top: 0;
+		}
+
+		#grid {
+			display: grid;
+			gap: 0px;
+			margin-bottom: 1em;
+		}
+
+		.cell {
+			text-align: center;
+			width: 40px;
+			height: 40px;
+			font-size: 20px;
+			line-height: 40px;
+			border: 1px solid #ccc;
+			cursor: pointer;
+			background: #fff;
+		}
+
+		.cell[data-anchor] {
+			background: #def;
+			font-weight: bold;
+		}
+
+		#controls {
+			margin-top: 1em;
+		}
+
+		#output {
+			white-space: pre;
+			font-family: monospace;
+			margin-top: 1rem;
+			background: #f9f9f9;
+			padding: 1em;
+			border: 1px solid #ccc;
+		}
+
+		#progress {
+			width: 100%;
+			margin: 1rem 0;
+		}
+
+		.num {
+			display: block;
+			font-weight: bold;
+		}
+
+		.arrow {
+			display: block;
+			font-size: 0.9em;
+			color: #333;
+		}
+	</style>
+</head>
+
+<body>
+
+
+	<script>
+		new class GlobalBacktrackingSolver {
+			constructor(grid = null, size = 7) {
+				this.width = size;
+				this.height = size;
+				this.totalCells = size * size;
+				this.grid = grid || Array(this.totalCells).fill(0);
+				this.used = new Set();
+				this.dirs = [-1, 1, -this.width, this.width];
+				this.attempts = 0;
+
+				this.buildUI();
+				this.updateGridDisplay();
+			}
+
+			buildUI() {
+				this.title = document.createElement("h1");
+				this.title.textContent = "LinkedIn Zip Solver";
+				this.byline = document.createElement("p");
+				this.byline.textContent = "By Adam Shen";
+
+				this.gridEl = document.createElement("div");
+				this.gridEl.id = "grid";
+				this.gridEl.style.gridTemplateColumns = `repeat(${this.width}, 40px)`;
+
+				for (let i = 0; i < this.totalCells; i++) {
+					const cell = document.createElement("div");
+					cell.className = "cell";
+					cell.dataset.index = i;
+					cell.onclick = () => this.editCell(i);
+					this.gridEl.appendChild(cell);
+				}
+
+				const controls = document.createElement("div");
+				controls.innerHTML = `
+					<button id="solveBtn">Solve</button>
+					<button id="clearBtn">Clear</button>
+				`;
+
+				this.outputEl = document.createElement("div");
+				this.outputEl.id = "output";
+
+				document.body.append(this.title, this.byline, this.gridEl, controls, this.outputEl);
+
+				document.getElementById("solveBtn").onclick = () => this.runSolver();
+				document.getElementById("clearBtn").onclick = () => this.clearGrid();
+
+				// default demo puzzle
+				this.grid = [
+					7, 0, 0, 0, 0, 0, 6,
+					0, 2, 0, 0, 0, 0, 0,
+					0, 0, 9, 0, 0, 0, 0,
+					0, 0, 0, 1, 0, 0, 0,
+					0, 0, 0, 0, 8, 0, 0,
+					0, 0, 0, 0, 0, 3, 0,
+					4, 0, 0, 0, 0, 0, 5,
+				];
+				this.updateGridDisplay();
+			}
+
+			resetSolverState() {
+				this.attempts = 0;
+				this.used = new Set();
+				this.points = this.grid
+					.map((val, i) => (val > 0 ? { val, i } : null))
+					.filter(Boolean)
+					.sort((a, b) => a.val - b.val);
+			}
+
+			updateGridDisplay() {
+				this.resetSolverState();
+				Array.from(this.gridEl.children).forEach((cell, i) => {
+					const val = this.grid[i];
+					cell.textContent = val > 0 ? val : "";
+					if (val > 0) {
+						cell.setAttribute("data-anchor", "true");
+					} else {
+						cell.removeAttribute("data-anchor");
+						cell.removeAttribute("style");
+					}
+				});
+			}
+
+			editCell(i) {
+				const current = this.grid[i];
+				let input = prompt("Enter a number (or 0 to clear):", current || "");
+				if (input === null) return;
+
+				const val = parseInt(input);
+				if (isNaN(val) || val < 0) return;
+
+				this.grid[i] = val;
+				this.updateGridDisplay();
+				this.outputEl.textContent = "";
+			}
+
+			clearGrid() {
+				this.grid = Array(this.totalCells).fill(0);
+				this.updateGridDisplay();
+				this.outputEl.textContent = "";
+			}
+
+			async visualizePath(path, active = true) {
+				const anchorMap = {};
+				this.points.forEach(p => {
+					anchorMap[p.i] = p.val.toString();
+				});
+
+				for (let i = 0; i < path.length - 1; i++) {
+					const current = path[i];
+					const next = path[i + 1];
+
+					const currentIsLastAnchor = this.points[this.points.length - 1].i === current;
+					if (currentIsLastAnchor) continue;
+
+					const [x1, y1] = this.getCoord(current);
+					const [x2, y2] = this.getCoord(next);
+					const dx = x2 - x1;
+					const dy = y2 - y1;
+
+					const arrow = {
+						"0,1": "→", "0,-1": "←",
+						"1,0": "↓", "-1,0": "↑"
+					}[`${dx},${dy}`] || "?";
+
+					const el = this.gridEl.children[current];
+
+					if (anchorMap[current]) {
+						el.innerHTML = `<span class="num">${anchorMap[current]}</span>` +
+							(active ? `<span class="arrow">${arrow}</span>` : "");
+						el.setAttribute("data-anchor", "true");
+					} else {
+						el.textContent = active ? arrow : "";
+						el.style.backgroundColor = active ? "#ffc" : "";
+					}
+				}
+
+				// draw the last node
+				// const last = path[path.length - 1];
+				// const el = this.gridEl.children[last];
+				// if (anchorMap[last]) {
+				// 	el.innerHTML = `<span class="num">${anchorMap[last]}</span>`;
+				// 	el.setAttribute("data-anchor", "true");
+				// } else {
+				// 	el.textContent = ".";
+				// }
+
+				return Promise.resolve();
+			}
+
+
+
+
+			// Solver logic
+			getCoord(i) {
+				return [Math.floor(i / this.width), i % this.width];
+			}
+
+			isAdjacent(i1, i2) {
+				const [x1, y1] = this.getCoord(i1);
+				const [x2, y2] = this.getCoord(i2);
+				return Math.abs(x1 - x2) + Math.abs(y1 - y2) === 1;
+			}
+
+			*dfsPaths(start, end) {
+				const queue = [[start, [start], new Set([start])]];
+
+				while (queue.length) {
+					const [current, path, visited] = queue.shift(); // ✅ FIFO: shortest path first
+					this.attempts++;
+
+					if (current === end) {
+						yield path;
+						continue;
+					}
+
+					for (const dir of this.dirs) {
+						const next = current + dir;
+						if (
+							next >= 0 &&
+							next < this.totalCells &&
+							!visited.has(next) &&
+							(!this.used.has(next) || next === end) &&
+							this.isAdjacent(current, next)
+						) {
+							queue.push([
+								next,
+								[...path, next],
+								new Set([...visited, next])
+							]);
+						}
+					}
+				}
+			}
+
+			async solveFrom(index, pathSoFar) {
+				if (index === this.points.length - 1) {
+					return this.used.size === this.totalCells ? pathSoFar : null;
+				}
+
+				const start = this.points[index].i;
+				const end = this.points[index + 1].i;
+
+				for (const path of this.dfsPaths(start, end)) {
+					path.forEach(i => this.used.add(i));
+					await this.visualizePath(path, true); // 🎨 show the path
+					await new Promise(r => setTimeout(r, 30)); // delay for animation
+
+					const nextPath = await this.solveFrom(index + 1, [...pathSoFar, ...path.slice(1)]);
+					if (nextPath) return nextPath;
+
+					// 🧹 backtrack
+					path.forEach(i => {
+						if (!this.points.some(p => p.i === i)) this.used.delete(i);
+					});
+					await this.visualizePath(path, false); // ❌ undo the path
+					await new Promise(r => setTimeout(r, 30));
+				}
+				return null;
+			}
+
+
+			async solve() {
+				if (this.points.length === 0) return null;
+				this.points.forEach(p => this.used.add(p.i));
+				return this.solveFrom(0, [this.points[0].i]);
+			}
+
+			async runSolver() {
+				this.resetSolverState();
+				const result = this.solve();
+
+				await this.displaySolution(result);
+
+			}
+
+			async displaySolution(path) {
+				if (!path) {
+					this.outputEl.textContent = "\n❌ No solution found.";
+					return;
+				}
+
+				await this.visualizePath(path, true); // draw everything at once
+
+				let output = `✔ Solved in ${this.attempts.toLocaleString()} path attempts`;
+
+				this.outputEl.textContent = output;
+			}
+
+		};
+
+	</script>
+</body>
+</html>

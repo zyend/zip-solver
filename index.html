@@ -282,10 +282,33 @@
 					const dx = x2 - x1;
 					const dy = y2 - y1;
 
-					const arrow = {
+					let arrow = {
 						"0,1": "→", "0,-1": "←",
 						"1,0": "↓", "-1,0": "↑"
 					}[`${dx},${dy}`] || "?";
+
+
+					// 🔁 Corner override only if previous exists
+					if (i > 0) {
+						const prev = path[i - 1];
+						const [px, py] = this.getCoord(prev);
+						const dx1 = x1 - px;
+						const dy1 = y1 - py;
+						const dx2 = x2 - x1;
+						const dy2 = y2 - y1;
+
+						const turnKey = `${dx1},${dy1}|${dx2},${dy2}`;
+						const cornerMap = {
+							"1,0|0,1": "↘", "0,1|1,0": "↘",
+							"1,0|0,-1": "↙", "0,-1|1,0": "↙",
+							"-1,0|0,1": "↗", "0,1|-1,0": "↗",
+							"-1,0|0,-1": "↖", "0,-1|-1,0": "↖",
+						};
+
+						if (cornerMap[turnKey]) {
+							arrow = cornerMap[turnKey];
+						}
+					}
 
 					const el = this.gridEl.children[current];
 

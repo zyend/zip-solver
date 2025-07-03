@@ -110,7 +110,7 @@
 
 				this.gridEl = document.createElement("div");
 				this.gridEl.id = "grid";
-				this.grid = [...this.defaultGrid]; 
+				this.grid = [...this.defaultGrid];
 				this.rebuildGrid();
 
 				const controls = document.createElement("div");
@@ -157,7 +157,7 @@
 				this.width = 7;
 				this.height = 7;
 				this.totalCells = this.width * this.height;
-				this.grid = [...this.defaultGrid]; 
+				this.grid = [...this.defaultGrid];
 
 				this.rebuildGrid();
 				this.updateGridDisplay();
@@ -165,13 +165,20 @@
 
 				// Sync selector
 				this.sizeSelector.value = "7";
+				this.dirs = [-1, 1, -this.width, this.width];
 			}
 
 			resetWithSize(newSize) {
 				this.width = newSize;
 				this.height = newSize;
 				this.totalCells = newSize * newSize;
-				this.grid = Array(this.totalCells).fill(0);
+
+				if (!this.grid || this.grid.length !== this.totalCells) {
+					this.grid = Array(this.totalCells).fill(0);
+				} else {
+					this.grid.length = this.totalCells;
+				}
+
 				this.gridEl.innerHTML = "";
 				this.gridEl.style.gridTemplateColumns = `repeat(${this.width}, 40px)`;
 
@@ -185,6 +192,7 @@
 
 				this.updateGridDisplay();
 				this.outputEl.textContent = "";
+				this.dirs = [-1, 1, -this.width, this.width];
 			}
 
 			resetSolverState() {
@@ -364,27 +372,29 @@
 
 			async solve() {
 				if (this.points.length === 0) return null;
+
+			console.log("Points:", this.points);
+			console.log("Grid length:", this.grid.length, "Total cells:", this.totalCells);
+
 				this.points.forEach(p => this.used.add(p.i));
 				return this.solveFrom(0, [this.points[0].i]);
 			}
 
 			async runSolver() {
 				this.resetSolverState();
-				const result = this.solve();
-
+				const result = await this.solve();
 				await this.displaySolution(result);
-
 			}
 
 			async displaySolution(path) {
 				if (!path) {
-					this.outputEl.textContent = "\n❌ No solution found.";
+					this.outputEl.textContent = "❌ No solution found.";
 					return;
 				}
 
 				await this.visualizePath(path, true); // draw everything at once
 
-				let output = `✔ Solved in ${this.attempts.toLocaleString()} path attempts`;
+				let output = `✅ Solved in ${this.attempts.toLocaleString()} path attempts`;
 
 				this.outputEl.textContent = output;
 			}

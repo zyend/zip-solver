@@ -86,6 +86,7 @@
 				this.used = new Set();
 				this.dirs = [-1, 1, -this.width, this.width];
 				this.attempts = 0;
+				this.anchorColors = {}; // key: index (position), value: {r,g,b}
 
 				// default demo puzzle
 				this.defaultGrid = [
@@ -198,10 +199,16 @@
 			resetSolverState() {
 				this.attempts = 0;
 				this.used = new Set();
+
 				this.points = this.grid
 					.map((val, i) => (val > 0 ? { val, i } : null))
 					.filter(Boolean)
 					.sort((a, b) => a.val - b.val);
+
+				this.anchorColors = {};
+				this.points.forEach(p => {
+					this.anchorColors[p.i] = this.getRandomPastelRGB();
+				});
 			}
 
 			rebuildGrid() {
@@ -256,6 +263,13 @@
 					anchorMap[p.i] = p.val.toString();
 				});
 
+				let anchorSegmentStart = this.points.find(p => p.i === path[0]);
+				let anchorSegmentEnd = this.points.find(p => p.i === path[path.length - 1]);
+
+				const startRGB = this.anchorColors[anchorSegmentStart?.i] || { r: 255, g: 255, b: 255 };
+				const endRGB = this.anchorColors[anchorSegmentEnd?.i] || { r: 255, g: 255, b: 255 };
+
+
 				for (let i = 0; i < path.length - 1; i++) {
 					const current = path[i];
 					const next = path[i + 1];
@@ -276,12 +290,24 @@
 					const el = this.gridEl.children[current];
 
 					if (anchorMap[current]) {
+						const anchorRGB = this.anchorColors[current] || { r: 255, g: 255, b: 255 };
+						const bgColor = `rgb(${anchorRGB.r}, ${anchorRGB.g}, ${anchorRGB.b})`;
+
 						el.innerHTML = `<span class="num">${anchorMap[current]}</span>` +
 							(active ? `<span class="arrow">${arrow}</span>` : "");
+						el.style.backgroundColor = bgColor;
 						el.setAttribute("data-anchor", "true");
 					} else {
 						el.textContent = active ? arrow : "";
-						el.style.backgroundColor = active ? "#ffc" : "";
+						if (active) {
+							const t = i / (path.length - 1); // blend factor
+							const r = Math.round(startRGB.r + (endRGB.r - startRGB.r) * t);
+							const g = Math.round(startRGB.g + (endRGB.g - startRGB.g) * t);
+							const b = Math.round(startRGB.b + (endRGB.b - startRGB.b) * t);
+							el.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+						} else {
+							el.style.backgroundColor = "";
+						}
 					}
 				}
 
@@ -299,7 +325,23 @@
 			}
 
 
+			getRandomPastelRGB() {
+				const hue = Math.floor(Math.random() * 360);
+				return this.hslToRgb(hue, 70, 85); // pastel: lightness high
+			}
 
+			hslToRgb(h, s, l) {
+				s /= 100;
+				l /= 100;
+				const k = n => (n + h / 30) % 12;
+				const a = s * Math.min(l, 1 - l);
+				const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+				return {
+					r: Math.round(f(0) * 255),
+					g: Math.round(f(8) * 255),
+					b: Math.round(f(4) * 255)
+				};
+			}
 
 			// Solver logic
 			getCoord(i) {
@@ -373,8 +415,8 @@
 			async solve() {
 				if (this.points.length === 0) return null;
 
-			console.log("Points:", this.points);
-			console.log("Grid length:", this.grid.length, "Total cells:", this.totalCells);
+				console.log("Points:", this.points);
+				console.log("Grid length:", this.grid.length, "Total cells:", this.totalCells);
 
 				this.points.forEach(p => this.used.add(p.i));
 				return this.solveFrom(0, [this.points[0].i]);
@@ -392,11 +434,29 @@
 					return;
 				}
 
-				await this.visualizePath(path, true); // draw everything at once
+				// 🔁 Build anchor segments
+				for (let i = 0; i < this.points.length - 1; i++) {
+					const from = this.points[i];
+					const to = this.points[i + 1];
 
-				let output = `✅ Solved in ${this.attempts.toLocaleString()} path attempts`;
+					// Find the sub-path between these two anchors
+					const fromIdx = path.indexOf(from.i);
+					const toIdx = path.indexOf(to.i);
 
-				this.outputEl.textContent = output;
+					if (fromIdx !== -1 && toIdx !== -1 && toIdx > fromIdx) {
+						const segment = path.slice(fromIdx, toIdx + 1);
+						await this.visualizePath(segment, true, from, to);
+					}
+				}
+
+				const lastAnchor = this.points[this.points.length - 1];
+				const el = this.gridEl.children[lastAnchor.i];
+				const rgb = this.anchorColors[lastAnchor.i];
+				el.style.backgroundColor = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+				el.innerHTML = `<span class="num">${lastAnchor.val}</span>`;
+				el.setAttribute("data-anchor", "true");
+
+				this.outputEl.textContent = `✅ Solved in ${this.attempts.toLocaleString()} path attempts`;
 			}
 
 		};

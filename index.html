@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 	<meta charset="UTF-8" />
 	<title>LinkedIn Zip Solver</title>
@@ -16,6 +17,7 @@
 			margin-bottom: .4rem;
 			text-align: center;
 		}
+
 		p {
 			margin-top: 0;
 			font-size: .95rem;
@@ -26,6 +28,7 @@
 			gap: 0px;
 			margin-bottom: 1em;
 		}
+
 		.cell {
 			text-align: center;
 			width: 40px;
@@ -36,19 +39,26 @@
 			cursor: pointer;
 			background: #fff;
 		}
+
 		.cell[data-anchor] {
 			background: #def;
 			font-weight: bold;
 		}
+
 		.num {
 			display: block;
 		}
+
 		.cell[data-anchor] .arrow {
 			display: none;
 		}
-		#controls {
+
+		.controls {
 			margin-top: 1em;
+			display: flex;
+			gap: 1rem;
 		}
+
 		#output {
 			white-space: pre;
 			font-family: monospace;
@@ -57,6 +67,7 @@
 			padding: 1em;
 			border: 1px solid #ccc;
 		}
+
 		#progress {
 			width: 100%;
 			margin: 1rem 0;
@@ -65,8 +76,6 @@
 </head>
 
 <body>
-
-
 	<script>
 		new class GlobalBacktrackingSolver {
 			constructor(grid = null, size = 7) {
@@ -77,6 +86,17 @@
 				this.used = new Set();
 				this.dirs = [-1, 1, -this.width, this.width];
 				this.attempts = 0;
+
+				// default demo puzzle
+				this.defaultGrid = [
+					7, 0, 0, 0, 0, 0, 6,
+					0, 2, 0, 0, 0, 0, 0,
+					0, 0, 9, 0, 0, 0, 0,
+					0, 0, 0, 1, 0, 0, 0,
+					0, 0, 0, 0, 8, 0, 0,
+					0, 0, 0, 0, 0, 3, 0,
+					4, 0, 0, 0, 0, 0, 5,
+				];
 
 				this.buildUI();
 				this.updateGridDisplay();
@@ -90,6 +110,69 @@
 
 				this.gridEl = document.createElement("div");
 				this.gridEl.id = "grid";
+				this.grid = [...this.defaultGrid]; 
+				this.rebuildGrid();
+
+				const controls = document.createElement("div");
+				controls.className = "controls";
+
+				const solveBtn = document.createElement("button");
+				solveBtn.textContent = "Solve";
+				solveBtn.onclick = () => this.runSolver();
+
+				const clearBtn = document.createElement("button");
+				clearBtn.textContent = "Clear";
+				clearBtn.onclick = () => this.clearGrid();
+
+				const resetBtn = document.createElement("button");
+				resetBtn.textContent = "Demo Puzzle";
+				resetBtn.onclick = () => this.resetToDefault();
+
+				this.outputEl = document.createElement("div");
+				this.outputEl.id = "output";
+				this.outputEl.textContent = "Click on a cell to add or change a number.";
+
+				this.sizeSelector = document.createElement("select");
+				[5, 6, 7, 8, 9, 10].forEach(size => {
+					const opt = document.createElement("option");
+					opt.value = size;
+					opt.textContent = `${size} × ${size}`;
+					if (size === this.width) opt.selected = true;
+					this.sizeSelector.appendChild(opt);
+				});
+
+				this.sizeSelector.onchange = () => {
+					const newSize = parseInt(this.sizeSelector.value);
+					this.resetWithSize(newSize);
+				};
+
+				controls.append(solveBtn, clearBtn, this.sizeSelector, resetBtn);
+
+				document.body.append(this.title, this.byline, this.gridEl, controls, this.outputEl);
+
+				this.updateGridDisplay();
+			}
+
+			resetToDefault() {
+				this.width = 7;
+				this.height = 7;
+				this.totalCells = this.width * this.height;
+				this.grid = [...this.defaultGrid]; 
+
+				this.rebuildGrid();
+				this.updateGridDisplay();
+				this.outputEl.textContent = "Reseting to Default";
+
+				// Sync selector
+				this.sizeSelector.value = "7";
+			}
+
+			resetWithSize(newSize) {
+				this.width = newSize;
+				this.height = newSize;
+				this.totalCells = newSize * newSize;
+				this.grid = Array(this.totalCells).fill(0);
+				this.gridEl.innerHTML = "";
 				this.gridEl.style.gridTemplateColumns = `repeat(${this.width}, 40px)`;
 
 				for (let i = 0; i < this.totalCells; i++) {
@@ -100,31 +183,8 @@
 					this.gridEl.appendChild(cell);
 				}
 
-				const controls = document.createElement("div");
-				controls.innerHTML = `
-					<button id="solveBtn">Solve</button>
-					<button id="clearBtn">Clear</button>
-				`;
-
-				this.outputEl = document.createElement("div");
-				this.outputEl.id = "output";
-
-				document.body.append(this.title, this.byline, this.gridEl, controls, this.outputEl);
-
-				document.getElementById("solveBtn").onclick = () => this.runSolver();
-				document.getElementById("clearBtn").onclick = () => this.clearGrid();
-
-				// default demo puzzle
-				this.grid = [
-					7, 0, 0, 0, 0, 0, 6,
-					0, 2, 0, 0, 0, 0, 0,
-					0, 0, 9, 0, 0, 0, 0,
-					0, 0, 0, 1, 0, 0, 0,
-					0, 0, 0, 0, 8, 0, 0,
-					0, 0, 0, 0, 0, 3, 0,
-					4, 0, 0, 0, 0, 0, 5,
-				];
 				this.updateGridDisplay();
+				this.outputEl.textContent = "";
 			}
 
 			resetSolverState() {
@@ -134,6 +194,19 @@
 					.map((val, i) => (val > 0 ? { val, i } : null))
 					.filter(Boolean)
 					.sort((a, b) => a.val - b.val);
+			}
+
+			rebuildGrid() {
+				this.gridEl.innerHTML = "";
+				this.gridEl.style.gridTemplateColumns = `repeat(${this.width}, 40px)`;
+
+				for (let i = 0; i < this.totalCells; i++) {
+					const cell = document.createElement("div");
+					cell.className = "cell";
+					cell.dataset.index = i;
+					cell.onclick = () => this.editCell(i);
+					this.gridEl.appendChild(cell);
+				}
 			}
 
 			updateGridDisplay() {
@@ -166,7 +239,7 @@
 			clearGrid() {
 				this.grid = Array(this.totalCells).fill(0);
 				this.updateGridDisplay();
-				this.outputEl.textContent = "";
+				this.outputEl.textContent = "Cleared Grid";
 			}
 
 			async visualizePath(path, active = true) {
@@ -320,4 +393,5 @@
 
 	</script>
 </body>
+
 </html>
